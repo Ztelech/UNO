@@ -18,14 +18,14 @@ public class JugadorTest {
 
     @BeforeEach
     public void setUp() {
-        this.jugador = new Jugador(1, "Jeff", false, new ArrayList<>(), false, 0, 0, 0);
+        this.jugador = new Jugador(1, "Jeff", new ArrayList<>(), false, 0, 0, 0);
         this.jugador.agregarCarta(new Carta(1, ColorCarta.ROJO, TipoCarta.NUMERO, 5, 5));
         this.jugador.agregarCarta(new Carta(2, ColorCarta.AZUL, TipoCarta.SALTO, -1, 20));
         this.jugador.agregarCarta(new Carta(3, ColorCarta.NEGRO, TipoCarta.COMODIN_TOMA_CUATRO, -1, 50));
     }
 
     @Test
-    @DisplayName("RQ19: Los puntos de la mano suman el valor de cada carta")
+    @DisplayName("RF19: Los puntos de la mano suman el valor de cada carta")
     public void testCalcularPuntosMano() {
         assertEquals(75, this.jugador.calcularPuntosMano());
     }
@@ -64,6 +64,6 @@ public class JugadorTest {
     @DisplayName("Un jugador nuevo nunca tiene la mano en null")
     public void testManoNuncaNull() {
         assertNotNull(new Jugador().getMano());
-        assertNotNull(new Jugador(1, "A", false, null, false, 0, 0, 0).getMano());
+        assertNotNull(new Jugador(1, "A", null, false, 0, 0, 0).getMano());
     }
 }

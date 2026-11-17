@@ -30,7 +30,7 @@ public class ReintentosSincronizacionTest {
     @DisplayName("Sin internet: cada escritura fallida queda anotada en la cola local")
     public void testFalloQuedaPendiente() {
         GestorConexion g = BasesDePrueba.hibridaConNubeApagada(this.urlLocal, this.nombreNube, 0);
-        new ImpOperacionesJugadorBD(g).crear(new Jugador(1, "Jeff", false));
+        new ImpOperacionesJugadorBD(g).crear(new Jugador(1, "Jeff"));
 
         assertTrue(g.esperarSincronizacion(5_000));
         assertEquals(2, g.getPendientesDeSincronizar(), "Las tablas de la nube y el jugador 1.");
@@ -43,7 +43,7 @@ public class ReintentosSincronizacionTest {
         ImpOperacionesJugadorBD jugadores = new ImpOperacionesJugadorBD(g);
         ImpOperacionesPartidaBD partidas = new ImpOperacionesPartidaBD(g);
 
-        Jugador jeff = new Jugador(1, "Jeff", false);
+        Jugador jeff = new Jugador(1, "Jeff");
         jugadores.crear(jeff);
         jeff.setPuntosAcumulados(50);
         jugadores.actualizar(jeff); // misma entidad: sigue siendo un solo pendiente
@@ -68,7 +68,7 @@ public class ReintentosSincronizacionTest {
     @DisplayName("Si la nube sigue caída, el reintento no pierde nada y cuenta el intento")
     public void testNubeSigueCaida() throws Exception {
         GestorConexion g = BasesDePrueba.hibridaConNubeApagada(this.urlLocal, this.nombreNube, 0);
-        new ImpOperacionesJugadorBD(g).crear(new Jugador(1, "Jeff", false));
+        new ImpOperacionesJugadorBD(g).crear(new Jugador(1, "Jeff"));
         assertTrue(g.esperarSincronizacion(5_000));
 
         assertEquals(0, g.reintentarPendientes().get());
@@ -81,7 +81,7 @@ public class ReintentosSincronizacionTest {
     @DisplayName("La cola vive en H2: sobrevive a un reinicio de la aplicación")
     public void testPendientesSobrevivenReinicio() throws Exception {
         GestorConexion antes = BasesDePrueba.hibridaConNubeApagada(this.urlLocal, this.nombreNube, 0);
-        new ImpOperacionesJugadorBD(antes).crear(new Jugador(7, "Brenda", false));
+        new ImpOperacionesJugadorBD(antes).crear(new Jugador(7, "Brenda"));
         assertTrue(antes.esperarSincronizacion(5_000));
         antes.cerrar();
 
@@ -99,7 +99,7 @@ public class ReintentosSincronizacionTest {
     @DisplayName("El reintento automático sincroniza solo cuando vuelve el internet")
     public void testReintentoAutomatico() throws Exception {
         GestorConexion g = BasesDePrueba.hibridaConNubeApagada(this.urlLocal, this.nombreNube, 1);
-        new ImpOperacionesJugadorBD(g).crear(new Jugador(1, "Jeff", false));
+        new ImpOperacionesJugadorBD(g).crear(new Jugador(1, "Jeff"));
         assertTrue(g.esperarSincronizacion(5_000));
         assertTrue(g.getPendientesDeSincronizar() > 0);
 
@@ -117,7 +117,7 @@ public class ReintentosSincronizacionTest {
     @DisplayName("En modo H2_LOCAL no hay cola de reintentos")
     public void testSinColaEnModoLocal() throws Exception {
         GestorConexion g = BasesDePrueba.soloLocal();
-        new ImpOperacionesJugadorBD(g).crear(new Jugador(1, "Jeff", false));
+        new ImpOperacionesJugadorBD(g).crear(new Jugador(1, "Jeff"));
         assertEquals(0, g.getPendientesDeSincronizar());
         assertEquals(0, g.reintentarPendientes().get());
     }

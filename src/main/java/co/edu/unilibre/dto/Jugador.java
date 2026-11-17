@@ -4,14 +4,13 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Jugador de la partida. La mano vive solo en memoria; en la base se guardan sus estadísticas. */
+/** Jugador humano de la partida. La mano vive solo en memoria; en la base se guardan sus estadísticas. */
 public class Jugador implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
     private int id;
     private String nombre;
-    private boolean esBot;
     private List<Carta> mano = new ArrayList<>();
     private boolean dijoUno;
     private int puntosAcumulados;
@@ -21,17 +20,15 @@ public class Jugador implements Serializable {
     public Jugador() {
     }
 
-    public Jugador(int id, String nombre, boolean esBot) {
+    public Jugador(int id, String nombre) {
         this.id = id;
         this.nombre = nombre;
-        this.esBot = esBot;
     }
 
-    public Jugador(int id, String nombre, boolean esBot, List<Carta> mano, boolean dijoUno,
+    public Jugador(int id, String nombre, List<Carta> mano, boolean dijoUno,
                    int puntosAcumulados, int partidasJugadas, int partidasGanadas) {
         this.id = id;
         this.nombre = nombre;
-        this.esBot = esBot;
         this.mano = mano != null ? mano : new ArrayList<>();
         this.dijoUno = dijoUno;
         this.puntosAcumulados = puntosAcumulados;
@@ -49,6 +46,11 @@ public class Jugador implements Serializable {
 
     public boolean tieneColor(ColorCarta color) {
         return this.mano.stream().anyMatch(c -> c.getColor() == color);
+    }
+
+    /** RF10: indica si alguna carta de la mano se puede jugar sobre el descarte. */
+    public boolean tieneCartaJugable(Carta cartaDescarte, ColorCarta colorActivo) {
+        return this.mano.stream().anyMatch(c -> c.esJugableSobre(cartaDescarte, colorActivo));
     }
 
     public int calcularPuntosMano() {
@@ -69,14 +71,6 @@ public class Jugador implements Serializable {
 
     public void setNombre(String nombre) {
         this.nombre = nombre;
-    }
-
-    public boolean isEsBot() {
-        return esBot;
-    }
-
-    public void setEsBot(boolean esBot) {
-        this.esBot = esBot;
     }
 
     public List<Carta> getMano() {
@@ -121,9 +115,8 @@ public class Jugador implements Serializable {
 
     @Override
     public String toString() {
-        return "Jugador{id=" + id + ", nombre='" + nombre + "', esBot=" + esBot
-                + ", cartasEnMano=" + mano.size() + ", dijoUno=" + dijoUno
-                + ", puntosAcumulados=" + puntosAcumulados + ", partidasJugadas=" + partidasJugadas
-                + ", partidasGanadas=" + partidasGanadas + "}";
+        return "Jugador{id=" + id + ", nombre='" + nombre + "', cartasEnMano=" + mano.size()
+                + ", dijoUno=" + dijoUno + ", puntosAcumulados=" + puntosAcumulados
+                + ", partidasJugadas=" + partidasJugadas + ", partidasGanadas=" + partidasGanadas + "}";
     }
 }

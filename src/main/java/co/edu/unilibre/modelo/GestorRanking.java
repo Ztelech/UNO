@@ -6,8 +6,10 @@ import co.edu.unilibre.impOperaciones.ImpOperacionesJugadorBD;
 import java.util.List;
 import java.util.Locale;
 
-/** Procesa el fin de ronda y mantiene el ranking histórico a través del DAO de jugadores. */
+/** Perfiles de jugador y ranking histórico (RF20-RF23), a través del DAO de jugadores. */
 public class GestorRanking {
+
+    public static final int LONGITUD_MAXIMA_NOMBRE = 100;
 
     private final ImpOperacionesJugadorBD daoJugadores;
 
@@ -16,8 +18,29 @@ public class GestorRanking {
     }
 
     /**
-     * Todos los participantes suman una partida jugada; el ganador suma la victoria y los puntos.
-     * Parte de los valores guardados en la base y registra a quien todavía no exista.
+     * RF20: devuelve el perfil con ese nombre o lo crea si no existe. El nombre es único
+     * (se comparan los nombres sin espacios al inicio ni al final).
+     */
+    public Jugador registrarOSeleccionarPerfil(String nombre) {
+        String limpio = nombre == null ? "" : nombre.strip();
+        if (limpio.isEmpty()) {
+            throw new IllegalArgumentException("El nombre del jugador no puede estar vacío.");
+        }
+        if (limpio.length() > LONGITUD_MAXIMA_NOMBRE) {
+            throw new IllegalArgumentException("El nombre no puede tener más de " + LONGITUD_MAXIMA_NOMBRE + " caracteres.");
+        }
+        Jugador existente = this.daoJugadores.buscarPorNombre(limpio);
+        if (existente != null) {
+            return existente;
+        }
+        Jugador nuevo = new Jugador(this.daoJugadores.obtenerSiguienteId(), limpio);
+        this.daoJugadores.crear(nuevo);
+        return nuevo;
+    }
+
+    /**
+     * RF21 y RF22: todos los participantes suman una partida jugada; el ganador suma la victoria
+     * y los puntos. Parte de los valores guardados en la base y registra a quien no exista.
      */
     public void procesarResultadosPartida(Jugador ganador, int puntosNuevos, List<Jugador> todosLosJugadores) {
         for (Jugador jugador : todosLosJugadores) {
@@ -40,7 +63,7 @@ public class GestorRanking {
         }
     }
 
-    /** Top 10 histórico ordenado por puntos acumulados. */
+    /** RF23: Top 10 histórico ordenado por puntos acumulados. */
     public List<Jugador> generarTablaPosicionesTop10() {
         return this.daoJugadores.obtenerRankingOrdenadoPorPuntos();
     }

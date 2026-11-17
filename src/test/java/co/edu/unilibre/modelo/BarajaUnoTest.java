@@ -28,7 +28,7 @@ public class BarajaUnoTest {
     }
 
     private long contar(ColorCarta color, TipoCarta tipo) {
-        return this.baraja.getCartas().stream()
+        return this.baraja.obtenerCartasRestantes().stream()
                 .filter(c -> c.getColor() == color && c.getTipo() == tipo)
                 .count();
     }
@@ -45,19 +45,19 @@ public class BarajaUnoTest {
     }
 
     @Test
-    @DisplayName("RQ02: La baraja tiene exactamente 108 cartas")
+    @DisplayName("RF02: La baraja tiene exactamente 108 cartas")
     public void testGenera108Cartas() {
-        assertEquals(108, this.baraja.getCartas().size());
+        assertEquals(108, this.baraja.obtenerCartasRestantes().size());
         assertEquals(108, this.baraja.cartasRestantes());
     }
 
     @Test
-    @DisplayName("RQ02: Cada color tiene un 0, dos de cada número del 1 al 9 y dos de cada especial")
+    @DisplayName("RF02: Cada color tiene un 0, dos de cada número del 1 al 9 y dos de cada especial")
     public void testComposicionPorColor() {
         for (ColorCarta color : COLORES) {
             for (int n = 0; n <= 9; n++) {
                 final int numero = n;
-                long cantidad = this.baraja.getCartas().stream()
+                long cantidad = this.baraja.obtenerCartasRestantes().stream()
                         .filter(c -> c.getColor() == color && c.getTipo() == TipoCarta.NUMERO && c.getNumero() == numero)
                         .count();
                 assertEquals(numero == 0 ? 1 : 2, cantidad, "Cantidad de " + color + " " + numero);
@@ -69,17 +69,17 @@ public class BarajaUnoTest {
     }
 
     @Test
-    @DisplayName("RQ02: Hay 4 comodines de color y 4 comodines +4, todos de color NEGRO")
+    @DisplayName("RF02: Hay 4 comodines de color y 4 comodines +4, todos de color NEGRO")
     public void testComodines() {
         assertEquals(4, contar(ColorCarta.NEGRO, TipoCarta.COMODIN_COLOR));
         assertEquals(4, contar(ColorCarta.NEGRO, TipoCarta.COMODIN_TOMA_CUATRO));
-        assertEquals(8, this.baraja.getCartas().stream().filter(c -> c.getColor() == ColorCarta.NEGRO).count());
+        assertEquals(8, this.baraja.obtenerCartasRestantes().stream().filter(c -> c.getColor() == ColorCarta.NEGRO).count());
     }
 
     @Test
-    @DisplayName("RQ19: Valor en puntos: números su cara, acción 20, comodines 50 (total 1240)")
+    @DisplayName("RF19: Valor en puntos: números su cara, acción 20, comodines 50 (total 1240)")
     public void testValorPuntos() {
-        for (Carta c : this.baraja.getCartas()) {
+        for (Carta c : this.baraja.obtenerCartasRestantes()) {
             switch (c.getTipo()) {
                 case NUMERO -> assertEquals(c.getNumero(), c.getValorPuntos(), c.toString());
                 case SALTO, REVERSA, TOMA_DOS -> {
@@ -92,14 +92,14 @@ public class BarajaUnoTest {
                 }
             }
         }
-        assertEquals(1240, this.baraja.getCartas().stream().mapToInt(Carta::getValorPuntos).sum());
+        assertEquals(1240, this.baraja.obtenerCartasRestantes().stream().mapToInt(Carta::getValorPuntos).sum());
     }
 
     @Test
     @DisplayName("Auditoría: Cada carta tiene un id único del 1 al 108")
     public void testIdsUnicos() {
         Set<Integer> ids = new HashSet<>();
-        for (Carta c : this.baraja.getCartas()) {
+        for (Carta c : this.baraja.obtenerCartasRestantes()) {
             assertTrue(c.getId() >= 1 && c.getId() <= 108, "Id fuera de rango: " + c.getId());
             ids.add(c.getId());
         }
@@ -146,7 +146,7 @@ public class BarajaUnoTest {
             while (b.cartasRestantes() > 0) {
                 descarte.add(b.robar());
             }
-            b.recargarDescarte(descarte);
+            b.reciclarDescarte(descarte);
             List<Integer> orden = new ArrayList<>();
             while (b.cartasRestantes() > 0) {
                 orden.add(b.robar().getId());
@@ -175,11 +175,11 @@ public class BarajaUnoTest {
     }
 
     @Test
-    @DisplayName("RQ04: colocarAlFondo deja la carta como la última del mazo")
+    @DisplayName("RF04: devolverAlMazo deja la carta como la última del mazo")
     public void testColocarAlFondo() {
         Carta primera = this.baraja.robar();
-        this.baraja.colocarAlFondo(primera);
-        List<Carta> cartas = this.baraja.getCartas();
+        this.baraja.devolverAlMazo(primera);
+        List<Carta> cartas = this.baraja.obtenerCartasRestantes();
         assertEquals(primera.getId(), cartas.get(cartas.size() - 1).getId());
         assertEquals(108, this.baraja.cartasRestantes());
     }

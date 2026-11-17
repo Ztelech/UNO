@@ -60,10 +60,12 @@ public class GestorConexion {
         "CREATE TABLE IF NOT EXISTS jugadores ("
             + "id INT PRIMARY KEY, "
             + "nombre VARCHAR(100) NOT NULL, "
-            + "es_bot BOOLEAN NOT NULL, "
             + "puntos_acumulados INT DEFAULT 0, "
             + "partidas_jugadas INT DEFAULT 0, "
             + "partidas_ganadas INT DEFAULT 0)",
+        // Migración: el juego no tiene bots y el nombre del perfil es único (RF20).
+        "ALTER TABLE jugadores DROP COLUMN IF EXISTS es_bot",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_jugadores_nombre ON jugadores (nombre)",
         "CREATE TABLE IF NOT EXISTS partidas ("
             + "id_partida VARCHAR(50) PRIMARY KEY, "
             + "semilla BIGINT NOT NULL, "

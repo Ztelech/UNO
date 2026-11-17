@@ -36,7 +36,7 @@ public class GestorConexionTest {
     @DisplayName("Híbrido: la escritura en H2 es inmediata y la réplica en la nube no bloquea al jugador")
     public void testEscrituraNoBloqueante() throws Exception {
         GestorConexion g = BasesDePrueba.hibrida();
-        String insertar = "INSERT INTO jugadores (id, nombre, es_bot) VALUES (1, 'Jeff', FALSE)";
+        String insertar = "INSERT INTO jugadores (id, nombre) VALUES (1, 'Jeff')";
 
         long inicio = System.nanoTime();
         CompletableFuture<Void> replica = g.ejecutarEscritura(
@@ -68,7 +68,7 @@ public class GestorConexionTest {
 
         assertDoesNotThrow(g::inicializarBaseDeDatos);
         ImpOperacionesJugadorBD dao = new ImpOperacionesJugadorBD(g);
-        assertDoesNotThrow(() -> dao.crear(new co.edu.unilibre.dto.Jugador(1, "Jeff", false)));
+        assertDoesNotThrow(() -> dao.crear(new co.edu.unilibre.dto.Jugador(1, "Jeff")));
 
         assertTrue(g.esperarSincronizacion(20_000));
         assertEquals(1, dao.obtenerTodos().size(), "H2 local tiene el dato aunque la nube falle.");
@@ -97,10 +97,9 @@ public class GestorConexionTest {
         g.inicializarBaseDeDatos();
 
         try (var con = g.obtenerConexion();
-             PreparedStatement ps = con.prepareStatement("INSERT INTO jugadores (id, nombre, es_bot) VALUES (?, ?, ?)")) {
+             PreparedStatement ps = con.prepareStatement("INSERT INTO jugadores (id, nombre) VALUES (?, ?)")) {
             ps.setInt(1, 7);
             ps.setString(2, "Brenda");
-            ps.setBoolean(3, false);
             ps.executeUpdate();
         }
         assertEquals(1, BasesDePrueba.contar(g.obtenerConexionNube(), "SELECT COUNT(*) FROM jugadores"));

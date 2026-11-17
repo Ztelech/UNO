@@ -10,20 +10,21 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Persistencia de jugadores. Solo guarda estadísticas; la mano vive en memoria. */
+/** Persistencia de perfiles de jugador (RF20-RF22). Solo guarda estadísticas; la mano vive en memoria. */
 public class ImpOperacionesJugadorBD implements GenericDao<Jugador> {
 
     public static final int TAMANO_RANKING = 10;
 
-    private static final String COLUMNAS = "id, nombre, es_bot, puntos_acumulados, partidas_jugadas, partidas_ganadas";
+    private static final String COLUMNAS = "id, nombre, puntos_acumulados, partidas_jugadas, partidas_ganadas";
     private static final String SQL_INSERTAR =
-            "INSERT INTO jugadores (" + COLUMNAS + ") VALUES (?, ?, ?, ?, ?, ?)";
+            "INSERT INTO jugadores (" + COLUMNAS + ") VALUES (?, ?, ?, ?, ?)";
     private static final String SQL_ACTUALIZAR =
-            "UPDATE jugadores SET nombre = ?, es_bot = ?, puntos_acumulados = ?, partidas_jugadas = ?, "
+            "UPDATE jugadores SET nombre = ?, puntos_acumulados = ?, partidas_jugadas = ?, "
                     + "partidas_ganadas = ? WHERE id = ?";
     private static final String SQL_TODOS = "SELECT " + COLUMNAS + " FROM jugadores ORDER BY id";
     private static final String SQL_POR_ID = "SELECT " + COLUMNAS + " FROM jugadores WHERE id = ?";
     private static final String SQL_POR_NOMBRE = "SELECT " + COLUMNAS + " FROM jugadores WHERE nombre = ?";
+    private static final String SQL_SIGUIENTE_ID = "SELECT COALESCE(MAX(id), 0) + 1 FROM jugadores";
     private static final String SQL_RANKING = "SELECT " + COLUMNAS + " FROM jugadores "
             + "ORDER BY puntos_acumulados DESC, partidas_ganadas DESC, nombre ASC LIMIT " + TAMANO_RANKING;
 
@@ -66,7 +67,7 @@ public class ImpOperacionesJugadorBD implements GenericDao<Jugador> {
         }
     }
 
-    /** Top 10 histórico: más puntos primero; en empate, más partidas ganadas. */
+    /** RF23: Top 10 histórico; más puntos primero y, en empate, más partidas ganadas. */
     public List<Jugador> obtenerRankingOrdenadoPorPuntos() {
         return consultarLista(SQL_RANKING, null);
     }
@@ -77,10 +78,22 @@ public class ImpOperacionesJugadorBD implements GenericDao<Jugador> {
         return resultado.isEmpty() ? null : resultado.get(0);
     }
 
-    /** Inicio de sesión. Devuelve null si no existe. */
+    /** RF20: selección de perfil por nombre único. Devuelve null si no existe. */
     public Jugador buscarPorNombre(String nombre) {
         List<Jugador> resultado = consultarLista(SQL_POR_NOMBRE, ps -> ps.setString(1, nombre));
         return resultado.isEmpty() ? null : resultado.get(0);
+    }
+
+    /** RF20: siguiente id libre para un perfil nuevo. */
+    public int obtenerSiguienteId() {
+        try (Connection con = this.gestorConexion.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(SQL_SIGUIENTE_ID);
+             ResultSet rs = ps.executeQuery()) {
+            rs.next();
+            return rs.getInt(1);
+        } catch (SQLException e) {
+            throw new IllegalStateException("Error calculando el siguiente id de jugador: " + e.getMessage(), e);
+        }
     }
 
     // ------------------------------------------------------------------ JDBC
@@ -111,7 +124,6 @@ public class ImpOperacionesJugadorBD implements GenericDao<Jugador> {
         return new Jugador(
                 rs.getInt("id"),
                 rs.getString("nombre"),
-                rs.getBoolean("es_bot"),
                 new ArrayList<>(),
                 false,
                 rs.getInt("puntos_acumulados"),
@@ -123,10 +135,9 @@ public class ImpOperacionesJugadorBD implements GenericDao<Jugador> {
         try (PreparedStatement ps = con.prepareStatement(SQL_INSERTAR)) {
             ps.setInt(1, j.getId());
             ps.setString(2, j.getNombre());
-            ps.setBoolean(3, j.isEsBot());
-            ps.setInt(4, j.getPuntosAcumulados());
-            ps.setInt(5, j.getPartidasJugadas());
-            ps.setInt(6, j.getPartidasGanadas());
+            ps.setInt(3, j.getPuntosAcumulados());
+            ps.setInt(4, j.getPartidasJugadas());
+            ps.setInt(5, j.getPartidasGanadas());
             ps.executeUpdate();
         }
     }
@@ -134,11 +145,10 @@ public class ImpOperacionesJugadorBD implements GenericDao<Jugador> {
     private static int actualizarFila(Connection con, Jugador j) throws SQLException {
         try (PreparedStatement ps = con.prepareStatement(SQL_ACTUALIZAR)) {
             ps.setString(1, j.getNombre());
-            ps.setBoolean(2, j.isEsBot());
-            ps.setInt(3, j.getPuntosAcumulados());
-            ps.setInt(4, j.getPartidasJugadas());
-            ps.setInt(5, j.getPartidasGanadas());
-            ps.setInt(6, j.getId());
+            ps.setInt(2, j.getPuntosAcumulados());
+            ps.setInt(3, j.getPartidasJugadas());
+            ps.setInt(4, j.getPartidasGanadas());
+            ps.setInt(5, j.getId());
             return ps.executeUpdate();
         }
     }

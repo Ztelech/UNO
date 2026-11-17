@@ -4,7 +4,6 @@ import co.edu.unilibre.dto.Carta;
 import co.edu.unilibre.dto.ColorCarta;
 import co.edu.unilibre.dto.Jugador;
 import co.edu.unilibre.dto.Partida;
-import co.edu.unilibre.dto.TipoCarta;
 import co.edu.unilibre.impOperaciones.BasesDePrueba;
 import co.edu.unilibre.impOperaciones.GestorConexion;
 import co.edu.unilibre.impOperaciones.ImpOperacionesJugadorBD;
@@ -14,12 +13,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** GestorPartidaUno conectado a la persistencia híbrida (H2 + "nube" simulada). */
+/** GestorPartidaUno conectado a la persistencia híbrida (H2 + "nube" simulada) y al ranking. */
 public class GestorPartidaUnoPersistenciaTest {
 
     private static final long SEMILLA_PRUEBA = 987654321L;
@@ -27,6 +25,7 @@ public class GestorPartidaUnoPersistenciaTest {
     private GestorConexion conexion;
     private ImpOperacionesPartidaBD daoPartidas;
     private ImpOperacionesJugadorBD daoJugadores;
+    private GestorRanking ranking;
     private GestorPartidaUno gestor;
     private List<Jugador> jugadores;
 
@@ -35,85 +34,63 @@ public class GestorPartidaUnoPersistenciaTest {
         this.conexion = BasesDePrueba.hibrida();
         this.daoPartidas = new ImpOperacionesPartidaBD(this.conexion);
         this.daoJugadores = new ImpOperacionesJugadorBD(this.conexion);
-        this.gestor = new GestorPartidaUno(this.daoPartidas, new GestorRanking(this.daoJugadores));
-        this.jugadores = new ArrayList<>(List.of(
-                new Jugador(1, "Jeff", false), new Jugador(2, "Brenda", false), new Jugador(3, "Camila", false)));
+        this.ranking = new GestorRanking(this.daoJugadores);
+        this.gestor = new GestorPartidaUno(this.daoPartidas);
+        // RF20: los jugadores entran con su perfil.
+        this.jugadores = new java.util.ArrayList<>(List.of(
+                this.ranking.registrarOSeleccionarPerfil("Jeff"),
+                this.ranking.registrarOSeleccionarPerfil("Brenda"),
+                this.ranking.registrarOSeleccionarPerfil("Camila")));
     }
 
-    /** Primera carta legal del jugador activo, o null. */
-    private Carta primeraJugable() {
-        Jugador actual = this.gestor.getJugadorActivo();
-        for (Carta c : actual.getMano()) {
-            boolean masCuatroIlegal = c.getTipo() == TipoCarta.COMODIN_TOMA_CUATRO
-                    && actual.tieneColor(this.gestor.getColorActivo());
-            if (!masCuatroIlegal && c.esJugableSobre(this.gestor.getCartaDescarte(), this.gestor.getColorActivo())) {
-                return c;
-            }
-        }
-        return null;
-    }
-
-    private void jugarHastaElFinal() {
-        for (int paso = 0; paso < 2_000 && !this.gestor.isPartidaTerminada(); paso++) {
-            Jugador actual = this.gestor.getJugadorActivo();
-            Carta c = primeraJugable();
-            if (c == null) {
-                this.gestor.robarCartaTurno(actual);
-                this.gestor.pasarTurno();
-            } else {
-                if (actual.getMano().size() == 2) {
-                    this.gestor.cantarUno(actual);
-                }
-                this.gestor.jugarTurno(actual, c, c.getColor() == ColorCarta.NEGRO ? ColorCarta.AZUL : null);
-            }
-        }
+    private void iniciar(GestorPartidaUno g) {
+        g.configurarPartida(this.jugadores, SEMILLA_PRUEBA);
+        g.repartirManosIniciales();
+        g.iniciarDescarte();
     }
 
     @Test
-    @DisplayName("Cada jugada queda en H2 en el mismo instante en que se juega")
+    @DisplayName("RNF04: Cada jugada queda en H2 en el mismo instante en que se juega")
     public void testJugadaRegistradaAlInstante() {
-        this.gestor.configurarPartida(this.jugadores, SEMILLA_PRUEBA);
-        this.gestor.repartirManosIniciales();
-        this.gestor.iniciarDescarte();
-
-        Jugador actual = this.gestor.getJugadorActivo();
-        Carta c = primeraJugable();
-        if (c != null) {
-            this.gestor.jugarTurno(actual, c, c.getColor() == ColorCarta.NEGRO ? ColorCarta.AZUL : null);
+        iniciar(this.gestor);
+        Jugador actual = this.gestor.obtenerJugadorActivo();
+        if (this.gestor.isColorInicialPendiente()) {
+            this.gestor.elegirColorInicial(actual, ColorCarta.ROJO);
         } else {
-            this.gestor.robarCartaTurno(actual);
+            Carta c = SimuladorPartida.primeraJugable(this.gestor, actual);
+            if (c != null) {
+                this.gestor.jugarTurno(actual, c, c.getColor() == ColorCarta.NEGRO ? ColorCarta.AZUL : null);
+            } else {
+                this.gestor.robarCartaUno(actual);
+            }
         }
 
         // Sin esperar a la nube: lo que se lee de H2 ya coincide con el log en memoria.
         List<String> registradas = this.daoPartidas.obtenerJugadasDePartida(this.gestor.getIdPartida());
         assertEquals(List.of(this.gestor.getLogAcciones().split("\n")), registradas);
-        assertTrue(registradas.get(registradas.size() - 1).startsWith(c != null ? "JUGAR;" : "ROBAR;"));
     }
 
     @Test
     @DisplayName("Las jugadas en tiempo real llegan también a la nube")
     public void testJugadasReplicadasEnNube() throws Exception {
-        this.gestor.configurarPartida(this.jugadores, SEMILLA_PRUEBA);
-        this.gestor.repartirManosIniciales();
-        this.gestor.iniciarDescarte();
+        iniciar(this.gestor);
+        int enLocal = this.daoPartidas.obtenerJugadasDePartida(this.gestor.getIdPartida()).size();
 
         assertTrue(this.conexion.esperarSincronizacion(5_000));
-        int enNube = BasesDePrueba.contar(this.conexion.obtenerConexionNube(),
-                "SELECT COUNT(*) FROM jugadas_tiempo_real WHERE id_partida = ?", this.gestor.getIdPartida());
-        assertEquals(3, enNube, "JUGADORES, REPARTO y DESCARTE");
+        assertEquals(enLocal, BasesDePrueba.contar(this.conexion.obtenerConexionNube(),
+                "SELECT COUNT(*) FROM jugadas_tiempo_real WHERE id_partida = ?", this.gestor.getIdPartida()));
     }
 
     @Test
-    @DisplayName("finalizarRonda guarda la Partida completa y actualiza el ranking en H2 y en la nube")
+    @DisplayName("RF21 & RF22: al cerrar la ronda se guarda la Partida y el ranking en H2 y en la nube")
     public void testFinalizarRondaPersiste() throws Exception {
-        this.gestor.configurarPartida(this.jugadores, SEMILLA_PRUEBA);
-        this.gestor.repartirManosIniciales();
-        this.gestor.iniciarDescarte();
-        jugarHastaElFinal();
+        iniciar(this.gestor);
+        SimuladorPartida.jugarHastaElFinal(this.gestor, 3_000);
         assertTrue(this.gestor.isPartidaTerminada());
 
         int puntos = this.gestor.finalizarRonda();
         Jugador ganador = this.gestor.verificarGanador();
+        this.ranking.procesarResultadosPartida(ganador, puntos, this.jugadores);
 
         List<Partida> partidas = this.daoPartidas.obtenerTodos();
         assertEquals(1, partidas.size());
@@ -128,7 +105,7 @@ public class GestorPartidaUnoPersistenciaTest {
         Jugador ganadorBD = this.daoJugadores.buscarPorId(ganador.getId());
         assertEquals(puntos, ganadorBD.getPuntosAcumulados());
         assertEquals(1, ganadorBD.getPartidasGanadas());
-        assertEquals(3, this.daoJugadores.obtenerTodos().size());
+        assertEquals(ganador.getNombre(), this.ranking.generarTablaPosicionesTop10().get(0).getNombre());
 
         assertTrue(this.conexion.esperarSincronizacion(5_000));
         assertEquals(1, BasesDePrueba.contar(this.conexion.obtenerConexionNube(),
@@ -140,10 +117,8 @@ public class GestorPartidaUnoPersistenciaTest {
     @Test
     @DisplayName("finalizarRonda dos veces no duplica la partida")
     public void testFinalizarDosVeces() {
-        this.gestor.configurarPartida(this.jugadores, SEMILLA_PRUEBA);
-        this.gestor.repartirManosIniciales();
-        this.gestor.iniciarDescarte();
-        jugarHastaElFinal();
+        iniciar(this.gestor);
+        SimuladorPartida.jugarHastaElFinal(this.gestor, 3_000);
 
         int primera = this.gestor.finalizarRonda();
         assertEquals(primera, this.gestor.finalizarRonda());
@@ -153,17 +128,16 @@ public class GestorPartidaUnoPersistenciaTest {
     @Test
     @DisplayName("Partida completa sin internet: al volver la red, la nube queda igual que H2")
     public void testPartidaSinInternetLuegoSeSincroniza() throws Exception {
-        String urlLocal = BasesDePrueba.urlMemoria("local");
         String nombreNube = BasesDePrueba.nombreNube();
-        GestorConexion g = BasesDePrueba.hibridaConNubeApagada(urlLocal, nombreNube, 0);
+        GestorConexion g = BasesDePrueba.hibridaConNubeApagada(BasesDePrueba.urlMemoria("local"), nombreNube, 0);
         ImpOperacionesPartidaBD dao = new ImpOperacionesPartidaBD(g);
-        this.gestor = new GestorPartidaUno(dao, new GestorRanking(new ImpOperacionesJugadorBD(g)));
+        GestorRanking rankingSinRed = new GestorRanking(new ImpOperacionesJugadorBD(g));
+        GestorPartidaUno partida = new GestorPartidaUno(dao);
 
-        this.gestor.configurarPartida(this.jugadores, SEMILLA_PRUEBA);
-        this.gestor.repartirManosIniciales();
-        this.gestor.iniciarDescarte();
-        jugarHastaElFinal();
-        this.gestor.finalizarRonda();
+        iniciar(partida);
+        SimuladorPartida.jugarHastaElFinal(partida, 3_000);
+        int puntos = partida.finalizarRonda();
+        rankingSinRed.procesarResultadosPartida(partida.verificarGanador(), puntos, this.jugadores);
         assertTrue(g.esperarSincronizacion(10_000));
         assertTrue(g.getPendientesDeSincronizar() > 0);
 
@@ -171,7 +145,7 @@ public class GestorPartidaUnoPersistenciaTest {
         g.reintentarPendientes().get();
 
         assertEquals(0, g.getPendientesDeSincronizar());
-        String id = this.gestor.getIdPartida();
+        String id = partida.getIdPartida();
         assertEquals(BasesDePrueba.contar(g.obtenerConexionLocal(),
                         "SELECT COUNT(*) FROM jugadas_tiempo_real WHERE id_partida = ?", id),
                 BasesDePrueba.contar(g.obtenerConexionNube(),
@@ -186,17 +160,14 @@ public class GestorPartidaUnoPersistenciaTest {
     public void testPartidaSinInternet() {
         GestorConexion sinRed = new GestorConexion(ModoPersistencia.HIBRIDO_ASINCRONO,
                 BasesDePrueba.urlMemoria("local"), "sa", "",
-                "jdbc:postgresql://127.0.0.1:1/sin_red", "nadie", "nada");
+                "jdbc:postgresql://127.0.0.1:1/sin_red", "nadie", "nada", 0);
         sinRed.inicializarBaseDeDatos();
         ImpOperacionesPartidaBD dao = new ImpOperacionesPartidaBD(sinRed);
-        GestorPartidaUno g = new GestorPartidaUno(dao, new GestorRanking(new ImpOperacionesJugadorBD(sinRed)));
-        this.gestor = g;
+        GestorPartidaUno partida = new GestorPartidaUno(dao);
 
-        g.configurarPartida(this.jugadores, SEMILLA_PRUEBA);
-        g.repartirManosIniciales();
-        g.iniciarDescarte();
-        assertDoesNotThrow(this::jugarHastaElFinal);
-        assertDoesNotThrow(g::finalizarRonda);
+        iniciar(partida);
+        assertDoesNotThrow(() -> SimuladorPartida.jugarHastaElFinal(partida, 3_000));
+        assertDoesNotThrow(partida::finalizarRonda);
         assertEquals(1, dao.obtenerTodos().size(), "La partida quedó guardada en H2.");
     }
 }

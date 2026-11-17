@@ -31,19 +31,18 @@ public class ImpOperacionesJugadorBDTest {
     @Test
     @DisplayName("crear: el jugador está en H2 al instante y llega a la nube")
     public void testCrear() throws Exception {
-        this.dao.crear(new Jugador(1, "Jeff", false));
+        this.dao.crear(new Jugador(1, "Jeff"));
 
         List<Jugador> todos = this.dao.obtenerTodos();
         assertEquals(1, todos.size());
         assertEquals("Jeff", todos.get(0).getNombre());
-        assertFalse(todos.get(0).isEsBot());
         assertEquals(1, filasEnNube("SELECT COUNT(*) FROM jugadores WHERE nombre = ?", "Jeff"));
     }
 
     @Test
     @DisplayName("actualizar: cambia puntos y partidas en H2 y en la nube")
     public void testActualizar() throws Exception {
-        Jugador brenda = new Jugador(2, "Brenda", false);
+        Jugador brenda = new Jugador(2, "Brenda");
         this.dao.crear(brenda);
         brenda.setPuntosAcumulados(112);
         brenda.setPartidasJugadas(3);
@@ -61,20 +60,35 @@ public class ImpOperacionesJugadorBDTest {
     @Test
     @DisplayName("actualizar un jugador inexistente lanza IllegalStateException")
     public void testActualizarInexistente() {
-        assertThrows(IllegalStateException.class, () -> this.dao.actualizar(new Jugador(99, "Nadie", false)));
+        assertThrows(IllegalStateException.class, () -> this.dao.actualizar(new Jugador(99, "Nadie")));
     }
 
     @Test
     @DisplayName("crear un id repetido lanza IllegalStateException")
     public void testIdDuplicado() {
-        this.dao.crear(new Jugador(1, "Jeff", false));
-        assertThrows(IllegalStateException.class, () -> this.dao.crear(new Jugador(1, "Otro", false)));
+        this.dao.crear(new Jugador(1, "Jeff"));
+        assertThrows(IllegalStateException.class, () -> this.dao.crear(new Jugador(1, "Otro")));
+    }
+
+    @Test
+    @DisplayName("RF20: la base no permite dos perfiles con el mismo nombre")
+    public void testNombreUnico() {
+        this.dao.crear(new Jugador(1, "Jeff"));
+        assertThrows(IllegalStateException.class, () -> this.dao.crear(new Jugador(2, "Jeff")));
+    }
+
+    @Test
+    @DisplayName("RF20: obtenerSiguienteId devuelve el siguiente id libre")
+    public void testSiguienteId() {
+        assertEquals(1, this.dao.obtenerSiguienteId());
+        this.dao.crear(new Jugador(5, "Brenda"));
+        assertEquals(6, this.dao.obtenerSiguienteId());
     }
 
     @Test
     @DisplayName("buscarPorNombre y buscarPorId devuelven null si no existe")
     public void testBusquedas() {
-        this.dao.crear(new Jugador(3, "Camila", false));
+        this.dao.crear(new Jugador(3, "Camila"));
         assertEquals(3, this.dao.buscarPorNombre("Camila").getId());
         assertNull(this.dao.buscarPorNombre("Nadie"));
         assertNull(this.dao.buscarPorId(42));
@@ -83,7 +97,7 @@ public class ImpOperacionesJugadorBDTest {
     @Test
     @DisplayName("Persistencia en frío: la mano en juego no se guarda")
     public void testManoNoSePersiste() {
-        Jugador camila = new Jugador(3, "Camila", false);
+        Jugador camila = new Jugador(3, "Camila");
         camila.agregarCarta(new Carta(1, ColorCarta.ROJO, TipoCarta.NUMERO, 5, 5));
         this.dao.crear(camila);
 
@@ -94,7 +108,7 @@ public class ImpOperacionesJugadorBDTest {
     @DisplayName("Ranking: obtenerRankingOrdenadoPorPuntos ordena y limita a 10")
     public void testRanking() {
         for (int i = 1; i <= 12; i++) {
-            Jugador j = new Jugador(i, "J" + i, false);
+            Jugador j = new Jugador(i, "J" + i);
             j.setPuntosAcumulados(i * 100);
             this.dao.crear(j);
         }

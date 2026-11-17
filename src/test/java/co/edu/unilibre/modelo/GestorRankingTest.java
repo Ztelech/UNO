@@ -24,13 +24,35 @@ public class GestorRankingTest {
     }
 
     private Jugador registrar(int id, String nombre, int puntos, int jugadas, int ganadas) {
-        Jugador j = new Jugador(id, nombre, false, new ArrayList<>(), false, puntos, jugadas, ganadas);
+        Jugador j = new Jugador(id, nombre, new ArrayList<>(), false, puntos, jugadas, ganadas);
         this.dao.crear(j);
         return j;
     }
 
     @Test
-    @DisplayName("Fin de partida: todos suman una partida jugada y el ganador suma victoria y puntos")
+    @DisplayName("RF20: registrarOSeleccionarPerfil crea un perfil nuevo o devuelve el existente")
+    public void testRegistrarOSeleccionarPerfil() {
+        Jugador jeff = this.ranking.registrarOSeleccionarPerfil("Jeff");
+        Jugador brenda = this.ranking.registrarOSeleccionarPerfil("  Brenda ");
+        Jugador otraVezJeff = this.ranking.registrarOSeleccionarPerfil("Jeff");
+
+        assertEquals("Brenda", brenda.getNombre(), "Se quitan los espacios sobrantes.");
+        assertNotEquals(jeff.getId(), brenda.getId());
+        assertEquals(jeff.getId(), otraVezJeff.getId(), "El mismo nombre selecciona el mismo perfil.");
+        assertEquals(2, this.dao.obtenerTodos().size());
+    }
+
+    @Test
+    @DisplayName("RF20: un nombre vacío o demasiado largo no crea perfil")
+    public void testNombreInvalido() {
+        assertThrows(IllegalArgumentException.class, () -> this.ranking.registrarOSeleccionarPerfil("   "));
+        assertThrows(IllegalArgumentException.class, () -> this.ranking.registrarOSeleccionarPerfil(null));
+        assertThrows(IllegalArgumentException.class, () -> this.ranking.registrarOSeleccionarPerfil("x".repeat(101)));
+        assertTrue(this.dao.obtenerTodos().isEmpty());
+    }
+
+    @Test
+    @DisplayName("RF21 & RF22: todos suman una partida jugada y el ganador suma victoria y puntos")
     public void testProcesarResultadosPartida() {
         Jugador jeff = registrar(1, "Jeff", 100, 5, 2);
         Jugador brenda = registrar(2, "Brenda", 80, 5, 3);
@@ -50,7 +72,7 @@ public class GestorRankingTest {
     @Test
     @DisplayName("Fin de partida: un jugador nuevo se registra en la base")
     public void testJugadorNuevoSeRegistra() {
-        Jugador camila = new Jugador(3, "Camila", false);
+        Jugador camila = new Jugador(3, "Camila");
         this.ranking.procesarResultadosPartida(camila, 40, List.of(camila));
 
         Jugador leido = this.dao.buscarPorId(3);
@@ -63,7 +85,7 @@ public class GestorRankingTest {
     @DisplayName("Fin de partida: parte de los valores guardados, no de los que traiga el objeto en memoria")
     public void testParteDeLaBase() {
         registrar(1, "Jeff", 500, 10, 4);
-        Jugador enMemoria = new Jugador(1, "Jeff", false); // estadísticas en 0
+        Jugador enMemoria = new Jugador(1, "Jeff"); // estadísticas en 0
         this.ranking.procesarResultadosPartida(enMemoria, 10, List.of(enMemoria));
 
         assertEquals(510, this.dao.buscarPorId(1).getPuntosAcumulados());
@@ -71,7 +93,7 @@ public class GestorRankingTest {
     }
 
     @Test
-    @DisplayName("Top 10: ordenado por puntos, máximo 10 y desempate por partidas ganadas")
+    @DisplayName("RF23: Top 10 ordenado por puntos, máximo 10 y desempate por partidas ganadas")
     public void testTablaTop10() {
         for (int i = 1; i <= 12; i++) {
             registrar(i, "J" + i, i * 10, 1, 0);

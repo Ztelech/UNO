@@ -11,7 +11,7 @@ import java.util.Random;
 
 /**
  * Mazo de robo. Todo el azar sale de un único Random(semilla), así que la misma semilla
- * produce siempre el mismo orden, incluso al recargar el mazo con el descarte.
+ * produce siempre el mismo orden, incluso al reciclar el descarte.
  */
 public class BarajaUno {
 
@@ -27,7 +27,7 @@ public class BarajaUno {
         this.random = new Random(semilla);
     }
 
-    /** RQ02: construye las 108 cartas reglamentarias con ids 1..108 en un orden fijo. */
+    /** RF02: construye las 108 cartas reglamentarias con ids 1..108 en un orden fijo. */
     public void generar108Cartas() {
         this.cartas.clear();
         int id = 1;
@@ -64,23 +64,24 @@ public class BarajaUno {
         return this.cartas.remove(0);
     }
 
-    /** Devuelve una carta al fondo del mazo (carta inicial especial, RQ04). */
-    public void colocarAlFondo(Carta carta) {
+    /** RF04: devuelve una carta al fondo del mazo (p. ej. un +4 que salió como carta inicial). */
+    public void devolverAlMazo(Carta carta) {
         this.cartas.add(carta);
     }
 
     /** Cuando el mazo se agota, las cartas del descarte (menos la superior) vuelven barajadas. */
-    public void recargarDescarte(List<Carta> descartes) {
+    public void reciclarDescarte(List<Carta> descartes) {
         this.cartas.addAll(descartes);
         Collections.shuffle(this.cartas, this.random);
     }
 
-    public int cartasRestantes() {
-        return this.cartas.size();
+    /** Cartas que quedan en el mazo, de arriba hacia abajo (solo lectura). */
+    public List<Carta> obtenerCartasRestantes() {
+        return Collections.unmodifiableList(this.cartas);
     }
 
-    public List<Carta> getCartas() {
-        return Collections.unmodifiableList(this.cartas);
+    public int cartasRestantes() {
+        return this.cartas.size();
     }
 
     public long getSemilla() {
