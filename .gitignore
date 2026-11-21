@@ -3,4 +3,7 @@ target/
 *.trace.db
 .idea/
 *.iml
-config.local.properties
+# config.local.properties  (desactivado a petición: el archivo se rastrea con Git)
+
+# Paquetes con credenciales reales de Neon (nunca subir)
+config-neon-*.zip
