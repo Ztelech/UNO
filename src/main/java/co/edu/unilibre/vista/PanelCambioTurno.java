@@ -84,7 +84,7 @@ class PanelCambioTurno extends FondoPlaya {
                 uno.setEnabled(false);
             } else {
                 respuesta.setForeground(TemaUno.ROJO_UNO);
-                respuesta.setText("Solo se canta con una carta (RF16).");
+                respuesta.setText("Solo se canta UNO cuando te queda una carta.");
             }
         });
         p.add(pregunta);

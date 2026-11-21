@@ -34,6 +34,7 @@ class ComponenteCarta extends JButton {
     private boolean jugable;
     private boolean atenuada;
     private boolean bloqueada;
+    private boolean nueva;
 
     ComponenteCarta(Carta carta, float escala) {
         this.carta = carta;
@@ -69,6 +70,13 @@ class ComponenteCarta extends JButton {
         repaint();
     }
 
+    /** Señala la carta que el jugador acaba de robar. */
+    void marcarNueva() {
+        this.nueva = true;
+        getAccessibleContext().setAccessibleName(TemaUno.describir(this.carta) + " (recién robada)");
+        repaint();
+    }
+
     @Override
     protected void paintComponent(Graphics g) {
         Graphics2D g2 = (Graphics2D) g.create();
@@ -82,6 +90,17 @@ class ComponenteCarta extends JButton {
         pintarCarta(g2, 0, y);
         if (this.bloqueada) {
             pintarCandado(g2, ANCHO - 26, y + 2);
+        }
+        if (this.nueva) {
+            g2.setComposite(java.awt.AlphaComposite.SrcOver);
+            g2.setColor(TemaUno.AMARILLO_BOTON);
+            g2.fillRoundRect(6, y + ALTO - 30, ANCHO - 14, 20, 10, 10);
+            g2.setColor(TemaUno.MARINO_OSCURO);
+            g2.setFont(TemaUno.texto(11, java.awt.Font.BOLD));
+            FontMetrics fm = g2.getFontMetrics();
+            g2.drawString("NUEVA", (ANCHO - 2 - fm.stringWidth("NUEVA")) / 2, y + ALTO - 16);
+            g2.setStroke(new BasicStroke(3f));
+            g2.drawRoundRect(1, y + 1, ANCHO - 4, ALTO - 4, 14, 14);
         }
         if (hasFocus()) {
             g2.setComposite(java.awt.AlphaComposite.SrcOver);
@@ -130,6 +149,13 @@ class ComponenteCarta extends JButton {
             textoCentrado(g2, etiqueta, x + 1, y + 2, fuente, new Color(0, 0, 0, 160));
         }
         textoCentrado(g2, etiqueta, x, y, fuente, colorCentro);
+        if (etiqueta.equals("6") || etiqueta.equals("9")) {
+            // Como en las cartas reales: el 6 y el 9 llevan subrayado para no confundirlos.
+            FontMetrics fm = g2.getFontMetrics(fuente);
+            int ancho = fm.stringWidth(etiqueta);
+            g2.setColor(colorCentro);
+            g2.fillRect(x + (ANCHO - 2 - ancho) / 2, y + (ALTO - 2 + fm.getAscent() - fm.getDescent()) / 2 + 4, ancho, 3);
+        }
 
         g2.setFont(TemaUno.titulo(15));
         g2.setColor(color == ColorCarta.NEGRO ? Color.WHITE : TemaUno.textoSobre(color));

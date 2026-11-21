@@ -40,7 +40,7 @@ public class ImpOperacionesJugadorBDTest {
     }
 
     @Test
-    @DisplayName("actualizar: cambia puntos y partidas en H2 y en la nube")
+    @DisplayName("actualizar: cambia puntos en H2; en Neon el perfil existe pero no se pisan sus estadísticas")
     public void testActualizar() throws Exception {
         Jugador brenda = new Jugador(2, "Brenda");
         this.dao.crear(brenda);
@@ -54,7 +54,8 @@ public class ImpOperacionesJugadorBDTest {
         assertEquals(112, leido.getPuntosAcumulados());
         assertEquals(3, leido.getPartidasJugadas());
         assertEquals(1, leido.getPartidasGanadas());
-        assertEquals(1, filasEnNube("SELECT COUNT(*) FROM jugadores WHERE id = 2 AND puntos_acumulados = 112"));
+        // En Neon las estadísticas las suma cada partida al subir; otro computador no las sobrescribe.
+        assertEquals(1, filasEnNube("SELECT COUNT(*) FROM jugadores WHERE id = 2 AND puntos_acumulados = 0"));
     }
 
     @Test

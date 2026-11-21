@@ -5,6 +5,7 @@ import co.edu.unilibre.dto.Jugador;
 import co.edu.unilibre.impOperaciones.GestorConexion;
 import co.edu.unilibre.impOperaciones.ImpOperacionesJugadorBD;
 import co.edu.unilibre.impOperaciones.ImpOperacionesPartidaBD;
+import co.edu.unilibre.impOperaciones.SincronizadorNube;
 import co.edu.unilibre.modelo.GestorPartidaUno;
 import co.edu.unilibre.modelo.GestorRanking;
 
@@ -24,7 +25,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Ventana única del juego. Cambia entre pantallas con un CardLayout y coordina la partida
- * local (varias personas por turnos en el mismo computador).
+ * local (varias personas por turnos en el mismo computador). - Uso de Gemini para funciones del menú
  */
 public class VentanaPrincipal extends JFrame {
 
@@ -57,7 +58,7 @@ public class VentanaPrincipal extends JFrame {
         this.conexion = conexion;
         this.daoJugadores = new ImpOperacionesJugadorBD(conexion);
         this.daoPartidas = new ImpOperacionesPartidaBD(conexion);
-        this.ranking = new GestorRanking(this.daoJugadores);
+        this.ranking = new GestorRanking(this.daoJugadores, conexion::isNubeDisponible);
 
         this.panelMenu = new PanelMenu(this);
         this.panelCambioTurno = new PanelCambioTurno(this);
@@ -85,6 +86,42 @@ public class VentanaPrincipal extends JFrame {
         setSize(1280, 800);
         setLocationRelativeTo(null);
         mostrarMenu();
+        sincronizarConNube();
+    }
+
+    // ------------------------------------------------------------------ Neon
+
+    /**
+     * Al abrir: une perfiles con otros computadores, sube lo que falte y baja el ranking global.
+     * Corre en segundo plano; al terminar se refresca el menú.
+     */
+    private void sincronizarConNube() {
+        if (!this.conexion.isModoHibridoConNube()) {
+            return;
+        }
+        new SincronizadorNube(this.conexion).sincronizarEnSegundoPlano()
+                .thenAccept(r -> SwingUtilities.invokeLater(() -> {
+                    if (MENU.equals(this.pantallaActual)) {
+                        this.panelMenu.refrescar();
+                    }
+                }));
+    }
+
+    /** Texto de aviso para el menú cuando las partidas no están llegando a Neon (null si todo va bien). */
+    String avisoNube() {
+        if (!this.conexion.isNubeConfigurada()) {
+            return "Sin conexión a Neon: las partidas solo se guardan en este computador "
+                    + "(falta el archivo config.local.properties).";
+        }
+        if (!this.conexion.isModoHibridoConNube()) {
+            return null;
+        }
+        int pendientes = this.conexion.getPendientesDeSincronizar();
+        if (!this.conexion.isNubeDisponible()) {
+            return "Neon no responde: lo jugado se subirá cuando vuelva la conexión"
+                    + (pendientes > 0 ? " (" + pendientes + " pendientes)." : ".");
+        }
+        return pendientes > 0 ? pendientes + " registros pendientes por subir a Neon." : null;
     }
 
     // ------------------------------------------------------------------ navegación
@@ -92,6 +129,15 @@ public class VentanaPrincipal extends JFrame {
     void mostrarMenu() {
         this.panelMenu.refrescar();
         mostrar(MENU);
+        if (this.conexion.isModoHibridoConNube()) {
+            // Cuando terminen de subir los resultados de la última partida, se refresca el ranking global.
+            this.conexion.ejecutarEnHiloNube(() -> true)
+                    .thenRun(() -> SwingUtilities.invokeLater(() -> {
+                        if (MENU.equals(this.pantallaActual)) {
+                            this.panelMenu.refrescar();
+                        }
+                    }));
+        }
     }
 
     void mostrarAuditoria() {
@@ -106,7 +152,7 @@ public class VentanaPrincipal extends JFrame {
 
     void mostrarMesa() {
         mostrar(MESA);
-        this.panelMesa.mostrar();
+        this.panelMesa.nuevoTurno();
     }
 
     private void mostrar(String pantalla) {
@@ -165,7 +211,9 @@ public class VentanaPrincipal extends JFrame {
     }
 
     void mostrarAlertaTrampa(String mensaje) {
-        JOptionPane.showMessageDialog(this, mensaje, "Alerta de trampa", JOptionPane.WARNING_MESSAGE);
+        // El modelo antepone el número de requisito (p. ej. "RF26: "); al jugador no le sirve.
+        String texto = mensaje.replaceFirst("^RF\\d+:\\s*", "");
+        JOptionPane.showMessageDialog(this, texto, "Alerta de trampa", JOptionPane.WARNING_MESSAGE);
         if (MESA.equals(this.pantallaActual)) {
             this.panelMesa.mostrar();
         }
@@ -179,6 +227,10 @@ public class VentanaPrincipal extends JFrame {
 
     PanelMenu getPanelMenu() {
         return this.panelMenu;
+    }
+
+    PanelMesa getPanelMesa() {
+        return this.panelMesa;
     }
 
     PanelAuditoria getPanelAuditoria() {

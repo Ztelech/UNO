@@ -53,8 +53,9 @@ public class NeonIntegracionTest {
         ImpOperacionesPartidaBD dao = new ImpOperacionesPartidaBD(g);
         try {
             long inicio = System.nanoTime();
-            dao.crear(new Partida(idPartida, 123456789L, LocalDate.now(), 1, 50, false, "JUGADORES;0;1,2"));
-            dao.registrarJugadaInstantanea(idPartida, 1, 0, "JUGADORES;0;1,2");
+            // Ids de prueba que no son perfiles reales: subir la partida les suma estadísticas.
+            dao.crear(new Partida(idPartida, 123456789L, LocalDate.now(), 900001, 50, false, "JUGADORES;0;900001,900002"));
+            dao.registrarJugadaInstantanea(idPartida, 1, 0, "JUGADORES;0;900001,900002");
             long milisegundos = (System.nanoTime() - inicio) / 1_000_000;
             assertTrue(milisegundos < 500, "Escribir no debe esperar a Neon; tardó " + milisegundos + " ms");
 
@@ -71,6 +72,9 @@ public class NeonIntegracionTest {
                         ps.setString(1, idPartida);
                         ps.executeUpdate();
                     }
+                }
+                try (PreparedStatement ps = con.prepareStatement("DELETE FROM jugadores WHERE id IN (900001, 900002)")) {
+                    ps.executeUpdate();
                 }
             }
         }

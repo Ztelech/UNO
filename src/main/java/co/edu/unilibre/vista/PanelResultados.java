@@ -45,7 +45,7 @@ class PanelResultados extends FondoPlaya {
                 34, Font.BOLD, TemaUno.ROJO_UNO)), c);
         String subtitulo = partida.isConteoPuntosActivo()
                 ? "+" + puntos + " puntos para " + ganador.getNombre()
-                : "Conteo de puntos desactivado en esta partida (RF19)";
+                : "Partida sin puntos: el ganador no suma puntos al ranking";
         this.tarjeta.add(TemaUno.centrado(TemaUno.etiqueta(subtitulo, 17, Font.BOLD, TemaUno.TEXTO)), c);
 
         DefaultTableModel modelo = new DefaultTableModel(new Object[]{"Jugador", "Cartas que le quedaron", "Puntos"}, 0) {
@@ -103,7 +103,9 @@ class PanelResultados extends FondoPlaya {
         p.add(titulo, BorderLayout.NORTH);
         List<String> alertas = partida.getAlertasTrampa();
         String detalle = "Partida " + partida.getIdPartida() + " · semilla " + partida.getSemilla()
-                + (alertas.isEmpty() ? " · resultado guardado" : " · " + String.join(" | ", alertas));
+                + (alertas.isEmpty() ? " · resultado guardado"
+                : " · " + alertas.stream().map(a -> a.replaceFirst("^RF\\d+:\\s*", ""))
+                        .collect(Collectors.joining(" | ")));
         JLabel texto = TemaUno.etiqueta("<html><div style='width:620px'>" + detalle + "</div></html>",
                 12, Font.PLAIN, new Color(0x3A4A60));
         p.add(texto, BorderLayout.CENTER);

@@ -10,7 +10,13 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Persistencia de perfiles de jugador (RF20-RF22). Solo guarda estadísticas; la mano vive en memoria. */
+/**
+ * Persistencia de perfiles de jugador (RF20-RF22). Solo guarda estadísticas; la mano vive en memoria.
+ * <p>
+ * En Neon las estadísticas no se sobrescriben desde un computador: las suma cada partida al subir
+ * (ver {@link ImpOperacionesPartidaBD}). Así varios computadores comparten el mismo ranking sin
+ * pisarse. Desde aquí a Neon solo se crean los perfiles que falten.
+ */
 public class ImpOperacionesJugadorBD implements GenericDao<Jugador> {
 
     public static final int TAMANO_RANKING = 10;
@@ -24,7 +30,7 @@ public class ImpOperacionesJugadorBD implements GenericDao<Jugador> {
     private static final String SQL_TODOS = "SELECT " + COLUMNAS + " FROM jugadores ORDER BY id";
     private static final String SQL_POR_ID = "SELECT " + COLUMNAS + " FROM jugadores WHERE id = ?";
     private static final String SQL_POR_NOMBRE = "SELECT " + COLUMNAS + " FROM jugadores WHERE nombre = ?";
-    private static final String SQL_SIGUIENTE_ID = "SELECT COALESCE(MAX(id), 0) + 1 FROM jugadores";
+    private static final String SQL_MAXIMO_ID = "SELECT COALESCE(MAX(id), 0) FROM jugadores";
     private static final String SQL_RANKING = "SELECT " + COLUMNAS + " FROM jugadores "
             + "ORDER BY puntos_acumulados DESC, partidas_ganadas DESC, nombre ASC LIMIT " + TAMANO_RANKING;
 
@@ -38,11 +44,11 @@ public class ImpOperacionesJugadorBD implements GenericDao<Jugador> {
         this.gestorConexion.registrarReplicador(ENTIDAD, ImpOperacionesJugadorBD::replicarDesdeLocal);
     }
 
-    /** Inserta en la base principal; la réplica en Neon inserta o actualiza para tolerar reintentos. */
+    /** Inserta en la base principal; en Neon solo crea el perfil si todavía no existe. */
     @Override
     public void crear(Jugador dato) {
         try {
-            this.gestorConexion.ejecutarEscritura(con -> insertar(con, dato), con -> guardarIdempotente(con, dato),
+            this.gestorConexion.ejecutarEscritura(con -> insertar(con, dato), con -> crearSiNoExiste(con, dato),
                     ENTIDAD, String.valueOf(dato.getId()));
         } catch (SQLException e) {
             throw new IllegalStateException("No se pudo crear el jugador " + dato.getNombre() + ": " + e.getMessage(), e);
@@ -54,6 +60,7 @@ public class ImpOperacionesJugadorBD implements GenericDao<Jugador> {
         return consultarLista(SQL_TODOS, null);
     }
 
+    /** Actualiza las estadísticas en la base principal; en Neon solo asegura que el perfil exista. */
     @Override
     public void actualizar(Jugador dato) {
         try {
@@ -61,7 +68,7 @@ public class ImpOperacionesJugadorBD implements GenericDao<Jugador> {
                 if (actualizarFila(con, dato) == 0) {
                     throw new SQLException("No existe el jugador con id " + dato.getId());
                 }
-            }, con -> guardarIdempotente(con, dato), ENTIDAD, String.valueOf(dato.getId()));
+            }, con -> crearSiNoExiste(con, dato), ENTIDAD, String.valueOf(dato.getId()));
         } catch (SQLException e) {
             throw new IllegalStateException("No se pudo actualizar el jugador " + dato.getId() + ": " + e.getMessage(), e);
         }
@@ -84,28 +91,86 @@ public class ImpOperacionesJugadorBD implements GenericDao<Jugador> {
         return resultado.isEmpty() ? null : resultado.get(0);
     }
 
-    /** RF20: siguiente id libre para un perfil nuevo. */
+    /** RF20: siguiente id libre en la base principal para un perfil nuevo. */
     public int obtenerSiguienteId() {
-        try (Connection con = this.gestorConexion.obtenerConexion();
-             PreparedStatement ps = con.prepareStatement(SQL_SIGUIENTE_ID);
-             ResultSet rs = ps.executeQuery()) {
-            rs.next();
-            return rs.getInt(1);
+        try (Connection con = this.gestorConexion.obtenerConexion()) {
+            return maximoId(con) + 1;
         } catch (SQLException e) {
             throw new IllegalStateException("Error calculando el siguiente id de jugador: " + e.getMessage(), e);
         }
     }
 
+    // ------------------------------------------------------------------ Neon (perfiles compartidos)
+
+    /** Busca el perfil por nombre directamente en Neon (lanza SQLException si no hay conexión). */
+    public Jugador buscarPorNombreEnNube(String nombre) throws SQLException {
+        try (Connection nube = this.gestorConexion.obtenerConexionNube()) {
+            List<Jugador> lista = consultar(nube, SQL_POR_NOMBRE, ps -> ps.setString(1, nombre));
+            return lista.isEmpty() ? null : lista.get(0);
+        }
+    }
+
+    /** Mayor id usado en Neon (lanza SQLException si no hay conexión). */
+    public int maximoIdEnNube() throws SQLException {
+        try (Connection nube = this.gestorConexion.obtenerConexionNube()) {
+            return maximoId(nube);
+        }
+    }
+
+    /** Top 10 global, leído de Neon (lanza SQLException si no hay conexión). */
+    public List<Jugador> obtenerRankingDeNube() throws SQLException {
+        try (Connection nube = this.gestorConexion.obtenerConexionNube()) {
+            return consultar(nube, SQL_RANKING, null);
+        }
+    }
+
+    /** Guarda en H2 un perfil traído de Neon (sin volver a replicarlo). */
+    public void guardarSoloLocal(Jugador j) {
+        try (Connection local = this.gestorConexion.obtenerConexionLocal()) {
+            guardarCompleto(local, j);
+        } catch (SQLException e) {
+            throw new IllegalStateException("No se pudo guardar el perfil de " + j.getNombre() + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** Crea en Neon el jugador de H2 con ese id si no existe (con estadísticas en cero: las suman sus partidas). */
+    static void asegurarEnNube(Connection local, Connection nube, int idJugador) throws SQLException {
+        if (!consultar(nube, SQL_POR_ID, ps -> ps.setInt(1, idJugador)).isEmpty()) {
+            return;
+        }
+        List<Jugador> deLocal = consultar(local, SQL_POR_ID, ps -> ps.setInt(1, idJugador));
+        String nombre = deLocal.isEmpty() ? "Jugador " + idJugador : deLocal.get(0).getNombre();
+        insertar(nube, new Jugador(idJugador, nombre));
+    }
+
+    static List<Jugador> leerTodos(Connection con) throws SQLException {
+        return consultar(con, SQL_TODOS, null);
+    }
+
+    /** Inserta o reemplaza el perfil completo (nombre y estadísticas) en esa base. */
+    static void guardarCompleto(Connection con, Jugador j) throws SQLException {
+        if (actualizarFila(con, j) == 0) {
+            insertar(con, j);
+        }
+    }
+
     // ------------------------------------------------------------------ JDBC
 
-    private interface Parametros {
+    interface Parametros {
         void asignar(PreparedStatement ps) throws SQLException;
     }
 
     private List<Jugador> consultarLista(String sql, Parametros parametros) {
+        try (Connection con = this.gestorConexion.obtenerConexion()) {
+            return consultar(con, sql, parametros);
+        } catch (SQLException e) {
+            throw new IllegalStateException("Error consultando jugadores: " + e.getMessage(), e);
+        }
+    }
+
+    private static List<Jugador> consultar(Connection con, String sql, Parametros parametros) throws SQLException {
         List<Jugador> lista = new ArrayList<>();
-        try (Connection con = this.gestorConexion.obtenerConexion();
-             PreparedStatement ps = con.prepareStatement(sql)) {
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
             if (parametros != null) {
                 parametros.asignar(ps);
             }
@@ -114,10 +179,16 @@ public class ImpOperacionesJugadorBD implements GenericDao<Jugador> {
                     lista.add(mapear(rs));
                 }
             }
-        } catch (SQLException e) {
-            throw new IllegalStateException("Error consultando jugadores: " + e.getMessage(), e);
         }
         return lista;
+    }
+
+    private static int maximoId(Connection con) throws SQLException {
+        try (PreparedStatement ps = con.prepareStatement(SQL_MAXIMO_ID);
+             ResultSet rs = ps.executeQuery()) {
+            rs.next();
+            return rs.getInt(1);
+        }
     }
 
     private static Jugador mapear(ResultSet rs) throws SQLException {
@@ -153,22 +224,15 @@ public class ImpOperacionesJugadorBD implements GenericDao<Jugador> {
         }
     }
 
-    /** Reintento: copia a la nube el estado actual en H2 del jugador con ese id. */
-    private static void replicarDesdeLocal(Connection local, Connection nube, String clave) throws SQLException {
-        try (PreparedStatement ps = local.prepareStatement(SQL_POR_ID)) {
-            ps.setInt(1, Integer.parseInt(clave));
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    guardarIdempotente(nube, mapear(rs));
-                }
-            }
+    /** Réplica en Neon: crea el perfil con estadísticas en cero si falta; nunca pisa las existentes. */
+    private static void crearSiNoExiste(Connection nube, Jugador j) throws SQLException {
+        if (consultar(nube, SQL_POR_ID, ps -> ps.setInt(1, j.getId())).isEmpty()) {
+            insertar(nube, new Jugador(j.getId(), j.getNombre()));
         }
     }
 
-    /** Actualiza y, si la fila no existía (p. ej. se perdió la réplica de crear), la inserta. */
-    private static void guardarIdempotente(Connection con, Jugador j) throws SQLException {
-        if (actualizarFila(con, j) == 0) {
-            insertar(con, j);
-        }
+    /** Reintento: crea en Neon el perfil de H2 si todavía no está. */
+    private static void replicarDesdeLocal(Connection local, Connection nube, String clave) throws SQLException {
+        asegurarEnNube(local, nube, Integer.parseInt(clave));
     }
 }

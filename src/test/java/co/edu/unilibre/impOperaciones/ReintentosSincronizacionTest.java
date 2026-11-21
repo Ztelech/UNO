@@ -59,7 +59,7 @@ public class ReintentosSincronizacionTest {
 
         assertEquals(0, g.getPendientesDeSincronizar());
         assertEquals(1, enNube(g, "SELECT COUNT(*) FROM jugadores WHERE id = 1 AND puntos_acumulados = 50"),
-                "La nube recibe el estado más reciente, no el de la primera escritura.");
+                "Al subir la partida P-1 (ganó Jeff con 50) Neon le suma esos puntos.");
         assertEquals(1, enNube(g, "SELECT COUNT(*) FROM partidas WHERE id_partida = 'P-1'"));
         assertEquals(3, enNube(g, "SELECT COUNT(*) FROM jugadas_tiempo_real WHERE id_partida = 'P-1'"));
     }

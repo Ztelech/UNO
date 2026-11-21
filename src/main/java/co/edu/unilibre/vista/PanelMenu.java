@@ -38,7 +38,8 @@ class PanelMenu extends FondoPlaya {
     private final JList<Jugador> listaJugadores = new JList<>(this.modeloJugadores);
     private final JTextField campoNombre = campoTexto(16);
     private final JTextField campoSemilla = campoTexto(16);
-    private final JCheckBox conteoPuntos = new JCheckBox("Sumar al ganador los puntos de las cartas rivales (RF19)", true);
+    private final JCheckBox conteoPuntos = new JCheckBox(
+            "Jugar con puntos: el ganador suma el valor de las cartas que les quedan a los rivales", true);
     private final JLabel mensaje = TemaUno.etiqueta(" ", 13, Font.BOLD, TemaUno.ROJO_UNO);
     private final BotonRedondeado botonJugar = TemaUno.botonPrincipal("JUGAR PARTIDA  ▶");
     private final DefaultTableModel modeloRanking =
@@ -48,12 +49,14 @@ class PanelMenu extends FondoPlaya {
                     return false;
                 }
             };
-    private final JLabel estadoNube = TemaUno.etiqueta(" ", 12, Font.PLAIN, TemaUno.TEXTO);
+
+    /** Solo aparece cuando las partidas no están llegando a Neon. */
+    private final JLabel avisoNube = TemaUno.etiqueta(" ", 12, Font.BOLD, TemaUno.TEXTO_ALERTA);
 
     PanelMenu(VentanaPrincipal ventana) {
         super(new BorderLayout(), Estilo.PLAYA);
         this.ventana = ventana;
-        setBorder(BorderFactory.createEmptyBorder(16, 40, 16, 40));
+        setBorder(BorderFactory.createEmptyBorder(12, 40, 16, 40));
 
         add(cabecera(), BorderLayout.NORTH);
 
@@ -70,25 +73,40 @@ class PanelMenu extends FondoPlaya {
         centro.add(tarjetaRanking(), c);
         add(centro, BorderLayout.CENTER);
 
-        add(pie(), BorderLayout.SOUTH);
         this.campoSemilla.setText(String.valueOf(VentanaPrincipal.semillaAleatoria()));
     }
 
     // ------------------------------------------------------------------ construcción
 
     private JComponent cabecera() {
-        JPanel p = new JPanel();
-        p.setOpaque(false);
-        p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
-        TituloUno titulo = new TituloUno(96);
+        JPanel logo = new JPanel();
+        logo.setOpaque(false);
+        logo.setLayout(new BoxLayout(logo, BoxLayout.Y_AXIS));
+        TituloUno titulo = new TituloUno(72);
         titulo.setAlignmentX(0.5f);
-        p.add(titulo);
-        JLabel subtitulo = TemaUno.centrado(TemaUno.etiqueta("Por Jeff y Brenda", 15, Font.BOLD, TemaUno.BLANCO));
+        logo.add(titulo);
+        JLabel subtitulo = TemaUno.centrado(TemaUno.etiqueta("Por Jeff y Brenda", 14, Font.BOLD, TemaUno.BLANCO));
         subtitulo.setOpaque(true);
         subtitulo.setBackground(TemaUno.MARINO_OSCURO);
-        subtitulo.setBorder(BorderFactory.createEmptyBorder(4, 14, 4, 14));
-        p.add(subtitulo);
-        p.add(Box.createVerticalStrut(12));
+        subtitulo.setBorder(BorderFactory.createEmptyBorder(3, 14, 3, 14));
+        logo.add(subtitulo);
+        logo.add(Box.createVerticalStrut(10));
+
+        BotonRedondeado auditar = TemaUno.botonClaro("Auditar partidas");
+        auditar.addActionListener(e -> this.ventana.mostrarAuditoria());
+        JPanel derecha = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        derecha.setOpaque(false);
+        derecha.add(auditar);
+        // Espacio del mismo ancho a la izquierda para que el logo quede centrado.
+        JPanel izquierda = new JPanel();
+        izquierda.setOpaque(false);
+        izquierda.setPreferredSize(derecha.getPreferredSize());
+
+        JPanel p = new JPanel(new BorderLayout());
+        p.setOpaque(false);
+        p.add(izquierda, BorderLayout.WEST);
+        p.add(logo, BorderLayout.CENTER);
+        p.add(derecha, BorderLayout.EAST);
         return p;
     }
 
@@ -103,10 +121,10 @@ class PanelMenu extends FondoPlaya {
         c.insets = new Insets(0, 0, 6, 0);
 
         tarjeta.add(TemaUno.tituloSeccion("Nueva partida local"), c);
-        tarjeta.add(TemaUno.etiqueta("Jugadores (2 a 10). Si el nombre ya existe se usa su perfil.",
-                13, Font.PLAIN, TemaUno.TEXTO_SUAVE), c);
 
-        JLabel etiquetaNombre = TemaUno.etiqueta("Nombre del jugador", 13, Font.BOLD, TemaUno.TEXTO);
+        JLabel etiquetaNombre = TemaUno.etiqueta(
+                "<html><b>Jugadores (2 a 10)</b> &nbsp;<span style='color:#4A5A70'>si el nombre ya existe se usa su perfil</span></html>",
+                13, Font.PLAIN, TemaUno.TEXTO);
         etiquetaNombre.setLabelFor(this.campoNombre);
         tarjeta.add(etiquetaNombre, c);
         BotonRedondeado agregar = TemaUno.botonAzul("Agregar");
@@ -128,28 +146,29 @@ class PanelMenu extends FondoPlaya {
         });
         this.listaJugadores.getAccessibleContext().setAccessibleName("Jugadores de la partida");
         JScrollPane scroll = new JScrollPane(this.listaJugadores);
-        scroll.setPreferredSize(new Dimension(300, 130));
+        scroll.setPreferredSize(new Dimension(300, 118));
+        scroll.setMinimumSize(new Dimension(200, 104));
+        BotonRedondeado quitar = TemaUno.botonClaro("Quitar");
+        quitar.setToolTipText("Quita de la partida al jugador seleccionado");
+        quitar.addActionListener(e -> quitarJugador());
+        JPanel columnaQuitar = new JPanel(new BorderLayout());
+        columnaQuitar.setOpaque(false);
+        columnaQuitar.add(quitar, BorderLayout.NORTH);
         c.fill = GridBagConstraints.BOTH;
         c.weighty = 1;
-        tarjeta.add(scroll, c);
+        tarjeta.add(fila(scroll, columnaQuitar), c);
         c.weighty = 0;
         c.fill = GridBagConstraints.HORIZONTAL;
-        BotonRedondeado quitar = TemaUno.botonClaro("Quitar seleccionado");
-        quitar.addActionListener(e -> quitarJugador());
-        JPanel filaQuitar = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        filaQuitar.setOpaque(false);
-        filaQuitar.add(quitar);
-        tarjeta.add(filaQuitar, c);
 
-        JLabel etiquetaSemilla = TemaUno.etiqueta("Semilla de la partida", 13, Font.BOLD, TemaUno.TEXTO);
+        JLabel etiquetaSemilla = TemaUno.etiqueta(
+                "<html><b>Semilla de la partida</b> &nbsp;<span style='color:#4A5A70'>la misma semilla reparte las mismas cartas</span></html>",
+                13, Font.PLAIN, TemaUno.TEXTO);
         etiquetaSemilla.setLabelFor(this.campoSemilla);
         tarjeta.add(etiquetaSemilla, c);
         this.campoSemilla.setFont(TemaUno.mono(16));
         BotonRedondeado aleatoria = TemaUno.botonAzul("Semilla aleatoria");
         aleatoria.addActionListener(e -> this.campoSemilla.setText(String.valueOf(VentanaPrincipal.semillaAleatoria())));
         tarjeta.add(fila(this.campoSemilla, aleatoria), c);
-        tarjeta.add(TemaUno.etiqueta("La misma semilla reproduce la misma baraja; se guarda para auditar la partida.",
-                12, Font.PLAIN, TemaUno.TEXTO_SUAVE), c);
 
         this.conteoPuntos.setOpaque(false);
         this.conteoPuntos.setFont(TemaUno.texto(13, Font.PLAIN));
@@ -169,7 +188,7 @@ class PanelMenu extends FondoPlaya {
         titulo.setOpaque(false);
         titulo.setLayout(new BoxLayout(titulo, BoxLayout.Y_AXIS));
         titulo.add(TemaUno.tituloSeccion("Top 10 histórico"));
-        titulo.add(TemaUno.etiqueta("Ordenado por puntos acumulados (RF23)", 13, Font.PLAIN, TemaUno.TEXTO_SUAVE));
+        titulo.add(TemaUno.etiqueta("Ordenado por puntos acumulados", 13, Font.PLAIN, TemaUno.TEXTO_SUAVE));
         tarjeta.add(titulo, BorderLayout.NORTH);
 
         JTable tabla = new JTable(this.modeloRanking);
@@ -180,21 +199,9 @@ class PanelMenu extends FondoPlaya {
         tabla.getColumnModel().getColumn(0).setMaxWidth(36);
         tabla.getAccessibleContext().setAccessibleName("Ranking de los 10 mejores jugadores");
         tarjeta.add(new JScrollPane(tabla), BorderLayout.CENTER);
+        this.avisoNube.setVisible(false);
+        tarjeta.add(this.avisoNube, BorderLayout.SOUTH);
         return tarjeta;
-    }
-
-    private JComponent pie() {
-        JPanel p = new JPanel(new BorderLayout());
-        p.setOpaque(false);
-        p.setBorder(BorderFactory.createEmptyBorder(12, 0, 0, 0));
-        BotonRedondeado auditar = TemaUno.botonClaro("Auditar partidas guardadas");
-        auditar.addActionListener(e -> this.ventana.mostrarAuditoria());
-        JPanel izquierda = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        izquierda.setOpaque(false);
-        izquierda.add(auditar);
-        p.add(izquierda, BorderLayout.WEST);
-        p.add(this.estadoNube, BorderLayout.EAST);
-        return p;
     }
 
     private static JPanel fila(JComponent principal, JComponent boton) {
@@ -236,20 +243,15 @@ class PanelMenu extends FondoPlaya {
         } catch (RuntimeException e) {
             mostrarMensaje("No se pudo leer el ranking: " + e.getMessage(), true);
         }
-        actualizarEstadoNube();
+        String aviso = this.ventana.avisoNube();
+        this.avisoNube.setText(aviso == null ? " " : "<html><div style='width:380px'>⚠ " + aviso + "</div></html>");
+        this.avisoNube.setVisible(aviso != null);
         actualizarBotonJugar();
     }
 
-    private void actualizarEstadoNube() {
-        var conexion = this.ventana.getConexion();
-        String texto;
-        if (!conexion.isNubeConfigurada()) {
-            texto = "Base local H2 · sin conexión a Neon configurada";
-        } else {
-            int pendientes = conexion.getPendientesDeSincronizar();
-            texto = "Base local H2 + Neon · " + (pendientes == 0 ? "todo sincronizado" : pendientes + " pendientes por subir");
-        }
-        this.estadoNube.setText(texto);
+    /** Solo para pruebas: aviso de Neon visible (null si no hay). */
+    String textoAvisoNube() {
+        return this.avisoNube.isVisible() ? this.avisoNube.getText() : null;
     }
 
     private void agregarJugador() {

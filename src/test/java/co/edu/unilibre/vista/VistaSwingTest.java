@@ -85,6 +85,107 @@ public class VistaSwingTest {
         }
     }
 
+    /** Semilla con inicio numérico cuya primera carta robada sí (o no) se puede jugar sobre la inicial. */
+    private static long semillaConRobo(boolean jugable) {
+        for (long s = 1; ; s++) {
+            BarajaUno b = new BarajaUno(s);
+            b.generar108Cartas();
+            b.barajar();
+            Carta inicial = b.obtenerCartasRestantes().get(21);
+            Carta robada = b.obtenerCartasRestantes().get(22);
+            if (inicial.getTipo() != TipoCarta.NUMERO || robada.getTipo() == TipoCarta.COMODIN_TOMA_CUATRO) {
+                continue;
+            }
+            if (robada.esJugableSobre(inicial, inicial.getColor()) == jugable) {
+                return s;
+            }
+        }
+    }
+
+    private static void enSwing(Runnable accion) throws Exception {
+        Exception[] error = new Exception[1];
+        SwingUtilities.invokeAndWait(() -> {
+            try {
+                accion.run();
+            } catch (Exception e) {
+                error[0] = e;
+            }
+        });
+        if (error[0] != null) {
+            throw error[0];
+        }
+    }
+
+    private static VentanaPrincipal mesaLista(long semilla) {
+        VentanaPrincipal v = new VentanaPrincipal(BasesDePrueba.soloLocal());
+        v.addNotify();
+        v.setSize(1280, 800);
+        List<Jugador> jugadores = List.of(
+                v.getRanking().registrarOSeleccionarPerfil("Jeff"),
+                v.getRanking().registrarOSeleccionarPerfil("Brenda"),
+                v.getRanking().registrarOSeleccionarPerfil("Camila"));
+        v.iniciarPartida(jugadores, semilla, true);
+        v.mostrarMesa();
+        return v;
+    }
+
+    @Test
+    @DisplayName("Robar: la carta aparece como NUEVA y se puede jugar o pasar sin ventanas emergentes")
+    public void testRoboConCartaJugable() throws Exception {
+        enSwing(() -> {
+            try {
+                VentanaPrincipal v = mesaLista(semillaConRobo(true));
+                Jugador jeff = v.getPartida().obtenerJugadorActivo();
+                PanelMesa mesa = v.getPanelMesa();
+
+                mesa.robarParaPrueba();
+                assertEquals("ROBADA_JUGABLE", mesa.nombreEstado());
+                assertEquals(8, jeff.getMano().size(), "La carta robada ya está en la mano.");
+                assertEquals(List.of("Jugar la NUEVA", "Pasar turno"), mesa.textosBotones());
+                assertTrue(mesa.textoMensaje().startsWith("Robaste "));
+                capturar(v, "3c-robada-jugable");
+
+                mesa.pulsarBoton("Jugar la NUEVA");
+                assertEquals(7, jeff.getMano().size());
+                assertEquals(VentanaPrincipal.TURNO, v.getPantallaActual());
+
+                v.mostrarMesa();
+                assertEquals("", mesa.textoMensaje(), "El mensaje del turno anterior se borra.");
+                assertEquals(List.of("¡UNO!", "Robar carta"), mesa.textosBotones());
+                v.dispose();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    @Test
+    @DisplayName("Robar: si la carta no se puede jugar, se ve en la mano y el turno termina al confirmar")
+    public void testRoboConCartaNoJugable() throws Exception {
+        enSwing(() -> {
+            try {
+                VentanaPrincipal v = mesaLista(semillaConRobo(false));
+                Jugador jeff = v.getPartida().obtenerJugadorActivo();
+                PanelMesa mesa = v.getPanelMesa();
+                int mazoAntes = v.getPartida().cartasEnMazo();
+
+                mesa.robarParaPrueba();
+                assertEquals("ROBADA_NO_JUGABLE", mesa.nombreEstado());
+                assertEquals(8, jeff.getMano().size());
+                assertEquals(mazoAntes - 1, v.getPartida().cartasEnMazo(), "El mazo baja en una carta.");
+                assertEquals(List.of("Terminar turno"), mesa.textosBotones());
+                capturar(v, "3d-robada-no-jugable");
+
+                mesa.pulsarBoton("Terminar turno");
+                assertEquals(VentanaPrincipal.TURNO, v.getPantallaActual());
+                assertNotSame(jeff, v.getPartida().obtenerJugadorActivo());
+                v.dispose();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
     @Test
     @DisplayName("Swing: menú → cambio de turno → mesa → resultados → auditoría, con capturas")
     public void testRecorridoCompleto() throws Exception {
@@ -113,6 +214,9 @@ public class VistaSwingTest {
         v.mostrarMenu();
         assertEquals(VentanaPrincipal.MENU, v.getPantallaActual());
         capturar(v, "1-menu");
+        v.setSize(1366, 690); // pantalla de portátil con barra de tareas
+        capturar(v, "1b-menu-1366x690");
+        v.setSize(1280, 800);
 
         List<Jugador> jugadores = List.of(
                 v.getRanking().registrarOSeleccionarPerfil("Jeff"),

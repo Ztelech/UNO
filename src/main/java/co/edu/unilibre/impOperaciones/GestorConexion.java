@@ -129,6 +129,7 @@ public class GestorConexion {
     private final Queue<CompletableFuture<?>> sincronizacionesPendientes = new ConcurrentLinkedQueue<>();
     private final AtomicInteger sincronizacionesExitosas = new AtomicInteger();
     private final AtomicInteger sincronizacionesFallidas = new AtomicInteger();
+    private volatile boolean nubeRespondio = false;
 
     /** Modo leído de UNO_MODO_PERSISTENCIA (por defecto HIBRIDO_ASINCRONO). */
     public GestorConexion() {
@@ -279,6 +280,7 @@ public class GestorConexion {
                     }
                 }, this.ejecutorNube)
                 .handle((resultado, error) -> {
+                    this.nubeRespondio = error == null || !esFalloDeRed(error);
                     if (error == null) {
                         this.sincronizacionesExitosas.incrementAndGet();
                         if (entidad != null) {
@@ -319,6 +321,51 @@ public class GestorConexion {
         return futuro;
     }
 
+    /**
+     * Ejecuta una tarea en el hilo de sincronización (el mismo de las réplicas, así no se cruzan).
+     * El resultado es false si la tarea lanzó una excepción.
+     */
+    public CompletableFuture<Boolean> ejecutarEnHiloNube(java.util.function.Supplier<Boolean> tarea) {
+        CompletableFuture<Boolean> futuro = CompletableFuture.supplyAsync(tarea, this.ejecutorNube)
+                .exceptionally(error -> {
+                    System.err.println("Sincronización con Neon fallida: " + error.getMessage());
+                    return false;
+                });
+        registrarFuturo(futuro);
+        return futuro;
+    }
+
+    /** true si la última vez que se habló con Neon respondió (para no esperar a la red en la interfaz). */
+    public boolean isNubeDisponible() {
+        return usaReplica() && this.nubeRespondio;
+    }
+
+    /** Lo actualiza el sincronizador al conectarse (o no) con Neon. */
+    public void marcarNubeDisponible(boolean disponible) {
+        this.nubeRespondio = disponible;
+    }
+
+    /** true si el error viene de no poder conectarse (sin internet, credenciales), no de los datos. */
+    private static boolean esFalloDeRed(Throwable error) {
+        Throwable causa = error instanceof CompletionException && error.getCause() != null ? error.getCause() : error;
+        if (causa instanceof SQLException sql) {
+            String estado = sql.getSQLState();
+            // 08xxx: conexión; 28xxx: autenticación; 90146: base H2 inexistente (simulación de nube caída).
+            return estado == null || estado.startsWith("08") || estado.startsWith("28") || sql.getErrorCode() == 90146;
+        }
+        return true;
+    }
+
+    /** Crea las tablas del juego en la conexión dada (usado por el sincronizador). */
+    public void crearTablasEn(Connection conexion) throws SQLException {
+        crearTablas(conexion);
+    }
+
+    /** true si el modo replica en Neon y hay conexión configurada. */
+    public boolean isModoHibridoConNube() {
+        return usaReplica();
+    }
+
     /** Cantidad de entidades que esperan llegar a Neon. */
     public int getPendientesDeSincronizar() {
         if (!usaReplica()) {
@@ -343,6 +390,7 @@ public class GestorConexion {
             }
             int sincronizadas = 0;
             try (Connection nube = obtenerConexionNube()) {
+                this.nubeRespondio = true;
                 for (String[] pendiente : pendientes) {
                     Replicador replicador = this.replicadores.get(pendiente[0]);
                     if (replicador == null) {
@@ -362,6 +410,7 @@ public class GestorConexion {
                 }
             } catch (SQLException e) {
                 // La nube sigue sin responder: se anota el intento en todos los pendientes.
+                this.nubeRespondio = false;
                 marcarIntentoFallidoEnTodos(e.getMessage());
             }
             if (sincronizadas > 0) {

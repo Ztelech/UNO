@@ -12,9 +12,18 @@ public class GestorRanking {
     public static final int LONGITUD_MAXIMA_NOMBRE = 100;
 
     private final ImpOperacionesJugadorBD daoJugadores;
+    /** Indica si Neon respondió hace poco (para no esperar a la red cuando no hay internet). */
+    private final java.util.function.BooleanSupplier disponibilidadNube;
 
+    /** Ranking solo con la base principal. */
     public GestorRanking(ImpOperacionesJugadorBD daoJugadores) {
+        this(daoJugadores, () -> false);
+    }
+
+    /** Ranking que consulta Neon (perfiles y Top 10 globales) cuando está disponible. */
+    public GestorRanking(ImpOperacionesJugadorBD daoJugadores, java.util.function.BooleanSupplier disponibilidadNube) {
         this.daoJugadores = daoJugadores;
+        this.disponibilidadNube = disponibilidadNube;
     }
 
     /**
@@ -33,7 +42,21 @@ public class GestorRanking {
         if (existente != null) {
             return existente;
         }
-        Jugador nuevo = new Jugador(this.daoJugadores.obtenerSiguienteId(), limpio);
+        int siguienteId = this.daoJugadores.obtenerSiguienteId();
+        if (this.disponibilidadNube.getAsBoolean()) {
+            // Con Neon disponible, el perfil puede venir de otro computador: se usa el mismo id.
+            try {
+                Jugador deOtroComputador = this.daoJugadores.buscarPorNombreEnNube(limpio);
+                if (deOtroComputador != null) {
+                    this.daoJugadores.guardarSoloLocal(deOtroComputador);
+                    return deOtroComputador;
+                }
+                siguienteId = Math.max(siguienteId, this.daoJugadores.maximoIdEnNube() + 1);
+            } catch (java.sql.SQLException e) {
+                // Sin conexión: se crea solo aquí; al sincronizar se le asigna un id libre en Neon.
+            }
+        }
+        Jugador nuevo = new Jugador(siguienteId, limpio);
         this.daoJugadores.crear(nuevo);
         return nuevo;
     }
@@ -65,6 +88,13 @@ public class GestorRanking {
 
     /** RF23: Top 10 histórico ordenado por puntos acumulados. */
     public List<Jugador> generarTablaPosicionesTop10() {
+        if (this.disponibilidadNube.getAsBoolean()) {
+            try {
+                return this.daoJugadores.obtenerRankingDeNube(); // ranking de todos los computadores
+            } catch (java.sql.SQLException e) {
+                // Sin conexión: se muestra el ranking guardado en este computador.
+            }
+        }
         return this.daoJugadores.obtenerRankingOrdenadoPorPuntos();
     }
 
